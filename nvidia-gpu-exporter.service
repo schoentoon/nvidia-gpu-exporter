@@ -1,0 +1,10 @@
+[Unit]
+Description=NVIDIA exporter for Prometheus 
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/usr/local/bin/nvidia-gpu-exporter
+
+[Install]
+WantedBy=multi-user.target
