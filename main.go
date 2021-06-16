@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -9,10 +10,13 @@ import (
 )
 
 func main() {
+	addr := flag.String("addr", "127.0.0.1:9101", "Listening address")
+	flag.Parse()
+
 	collector := NewGpuCollector()
 	prometheus.MustRegister(collector)
 
-	err := http.ListenAndServe(":9101", promhttp.Handler())
+	err := http.ListenAndServe(*addr, promhttp.Handler())
 	if err != nil {
 		log.Fatal(err)
 	}
