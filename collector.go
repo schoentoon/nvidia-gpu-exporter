@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"log"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -21,6 +20,14 @@ var driverDesc = prometheus.NewDesc(
 	[]string{"driver"}, nil,
 )
 
+// in here we're initializing the map with all the metrics that we're interested in
+// the key of the map will be the value that will be requested from `nvidia-smi`
+// for a full list of the possible values, have a look at the output of `nvidia-smi --help-query-gpu`
+// to add a new metric simply consult that output and look up the metric that you're intrested in
+// afterwards simply copy one of the prometheus.NewDesc functions and adjust the variables accordingly
+// do make sure to adjust the metric name (first variable for prometheus.NewDesc) to something unique
+// otherwise you will likely get a runtime failure. it is also important to leave the labels variable intact as is
+// as this is responsible for putting gpu name and uuid in the eventual prometheus metrics.
 func init() {
 	metrics["temperature.gpu"] = prometheus.NewDesc(
 		"gpu_temperature",
@@ -112,7 +119,7 @@ func (cc GpuCollector) Collect(ch chan<- prometheus.Metric) {
 		"--format=csv,noheader,nounits").Output()
 
 	if err != nil {
-		fmt.Printf("%s\n", err)
+		logrus.Errorf("%s\n", err)
 		return
 	}
 
@@ -121,7 +128,7 @@ func (cc GpuCollector) Collect(ch chan<- prometheus.Metric) {
 	records, err := csvReader.ReadAll()
 
 	if err != nil {
-		log.Fatal(err)
+		logrus.Errorf("%s\n", err)
 		return
 	}
 
@@ -137,7 +144,7 @@ func (cc GpuCollector) driverVersion(ch chan<- prometheus.Metric) {
 		"--format=csv,noheader,nounits").Output()
 
 	if err != nil {
-		fmt.Printf("%s\n", err)
+		logrus.Errorf("%s\n", err)
 		return
 	}
 
@@ -146,7 +153,7 @@ func (cc GpuCollector) driverVersion(ch chan<- prometheus.Metric) {
 	records, err := csvReader.ReadAll()
 
 	if err != nil {
-		log.Fatal(err)
+		logrus.Errorf("%s\n", err)
 		return
 	}
 
@@ -157,6 +164,9 @@ func (cc GpuCollector) driverVersion(ch chan<- prometheus.Metric) {
 			1,
 			row[0],
 		)
+		// we return here as we might get multiple results in the case of multiple gpu's
+		// but the result is going to be the same.. and prometheus would give a runtime error
+		// if you return a second value with the same label combination.
 		return
 	}
 }
@@ -165,6 +175,7 @@ func (cc GpuCollector) handleRow(row, query []string, ch chan<- prometheus.Metri
 	name := row[0]
 	uuid := row[1]
 
+	// we do a [2:] here to cut off the first 2 items that we already extracted (name and uuid)
 	for index, rawValue := range row[2:] {
 		// check for `N/A` which they return if something is not supported etc..
 		// we do a contains instead of a direct check as it somehow can't be consist
@@ -173,6 +184,7 @@ func (cc GpuCollector) handleRow(row, query []string, ch chan<- prometheus.Metri
 			continue
 		}
 
+		// label will be the according nvidia metric name, therefore the key in the global metrics map.
 		label := query[index+2] // offset by 2 as we cut off the name and uuid part
 		desc := metrics[label]
 		value, err := strconv.ParseFloat(rawValue, 64)
